@@ -1,0 +1,13 @@
+{
+    "controller": {
+      "name": "hshifter",
+      "title": "H-Pattern Shifter",
+      "author": "superswan",
+      "type": "transmission",
+      "description": "Simple H-pattern shifter using right stick",
+      "defaultActive": true,
+      "context": {
+        "mode": "manual"
+      }
+    }
+  }

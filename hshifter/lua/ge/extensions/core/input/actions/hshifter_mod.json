@@ -1,0 +1,20 @@
+{
+   "hshifter_x": {
+     "cat": "vehicle",
+     "order": 1,
+     "ctx": "ge",
+     "filterType": "axis",
+     "onChange": "extensions.hshifter.updateStickX(VALUE)",
+     "title": "H-Shifter X-Axis",
+     "desc": "Controls left-right movement for the H-pattern shifter"
+   },
+   "hshifter_y": {
+     "cat": "vehicle",
+     "order": 2,
+     "ctx": "ge",
+     "filterType": "axis",
+     "onChange": "extensions.hshifter.updateStickY(VALUE)",
+     "title": "H-Shifter Y-Axis",
+     "desc": "Controls up-down movement for the H-pattern shifter"
+   }
+ }
