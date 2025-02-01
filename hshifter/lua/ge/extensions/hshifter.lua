@@ -1,12 +1,17 @@
 local M = {}
 
+-- most of these values are to prevent annoying problems with auto-centering
 local stickX, stickY = 0.5, 0.5  
 local currentGear = 0
-local lockGear = nil  -- Gear lock to prevent false shifts
-local shiftThreshold = 0.15  -- Minimum distance to enter a gear
-local exitThreshold = 0.4    -- How far the stick must move to unlock a gear
-local neutralThreshold = 0.3 -- Stick must be fully back in neutral before shifting again
+local lockGear = nil  
+local r3Pressed = false
+local shiftThreshold = 0.15  
+local exitThreshold = 0.4    
+local neutralThreshold = 0.21 
+local reverseInit = false  
+local neutralCooldown = 0
 
+-- Define joystick positions for each gear
 local gearMap = {
     {x = 0.05, y = 0.90, gear = 1},  -- 1st gear: Top-left
     {x = 0.05, y = 0.10, gear = 2},  -- 2nd gear: Bottom-left
@@ -16,25 +21,34 @@ local gearMap = {
     {x = 0.95, y = 0.10, gear = 6}   -- 6th gear: Bottom-right
 }
 
+-- Function triggered when mod loads
 local function onExtensionLoaded()
     log("I", "H-Shifter Mod", "H-Shifter mod loaded successfully!")
-    log("I", "H-Shifter Mod", "Ensure 'H-Shifter X-Axis' and 'H-Shifter Y-Axis' are manually bound in Controls.")
+    log("W", "H-Shifter Mod", "Ensure 'H-Shifter X-Axis', 'H-Shifter Y-Axis', and 'H-Shifter R3 Button' are manually bound in Controls.")
 end
 
+-- Function triggered when mod unloads
 local function onExtensionUnloaded()
     log("I", "H-Shifter Mod", "H-Shifter mod unloaded.")
-    stickX = 0.5
-    stickY = 0.5
-    currentGear = 0
-    lockGear = nil
+    stickX, stickY = 0.5, 0.5
+    currentGear, lockGear = 0, nil
+    r3Pressed, reverseInit = false, false
 end
 
+-- 
 function M.updateStickX(value)
     stickX = value
+
+    -- reverse gear logic
+    if r3Pressed and stickX > 0.90 then
+        reverseInit = true
+    end
+
     if stickX < 0.3 or stickX > 0.7 then
         log("D", "H-Shifter Mod", string.format("Updated Stick X: %.2f", stickX))
     end
 end
+
 
 function M.updateStickY(value)
     stickY = value
@@ -43,9 +57,24 @@ function M.updateStickY(value)
     end
 end
 
+function M.updateR3(state)
+    r3Pressed = state
+    if not r3Pressed then
+        reverseInit = false -- Reset reverse if R3 is released
+    end
+    log("D", "H-Shifter Mod", "R3 " .. (r3Pressed and "Pressed" or "Released"))
+end
+
+
 local function getClosestGear()
     local minDist = math.huge
     local targetGear = 0
+
+    
+    if reverseInit and stickX > 0.90 then
+        log("I", "H-Shifter Mod", "Reverse gear engaged!")
+        return -1  
+    end
 
     for _, pos in ipairs(gearMap) do
         local dist = math.sqrt((stickX - pos.x)^2 + (stickY - pos.y)^2)
@@ -71,13 +100,31 @@ local function onPreRender(dt)
         return
     end
 
+    if neutralCooldown > 0 then
+        neutralCooldown = neutralCooldown - dt
+    end
+
     local newGear = getClosestGear()
 
     if newGear == 0 then
         if lockGear ~= nil then
-            log("D", "H-Shifter Mod", string.format("Stick returned to neutral, unlocking gear %d", lockGear))
+            log("W", "H-Shifter Mod", string.format("Stick returned to neutral, unlocking gear %d", lockGear))
+            neutralCooldown = 0.3 
         end
         lockGear = nil
+        return
+    end
+
+    if neutralCooldown > 0 then
+        return
+    end
+
+    if newGear == currentGear and lockGear == nil then
+        log("I", "H-Shifter Mod", string.format("Shifting from %d -> Neutral", currentGear))
+        vehicle:queueLuaCommand("controller.mainController.shiftToGearIndex(0)")
+        currentGear = 0
+        lockGear = nil
+        neutralCooldown = 0.3 
         return
     end
 
@@ -86,26 +133,27 @@ local function onPreRender(dt)
         if lockPos then
             local exitDist = math.sqrt((stickX - lockPos.x)^2 + (stickY - lockPos.y)^2)
             if exitDist < exitThreshold then
-                return -- Stay locked in gear
+                return
             end
         end
-        log("D", "H-Shifter Mod", string.format("Unlocked from gear %d", lockGear))
+        log("W", "H-Shifter Mod", string.format("Unlocked from gear %d", lockGear))
         lockGear = nil
     end
 
     if newGear and newGear ~= currentGear and not lockGear then
-        log("D", "H-Shifter Mod", string.format("Shifting from %d -> %d", currentGear, newGear))
+        log("I", "H-Shifter Mod", string.format("Shifting from %d -> %d", currentGear, newGear))
         vehicle:queueLuaCommand("controller.mainController.shiftToGearIndex(" .. newGear .. ")")
         currentGear = newGear
-        lockGear = newGear  -- Lock the gear to prevent accidental shifts
+        lockGear = newGear
     end
 end
 
-
+-- Bind functions
 M.onPreRender = onPreRender
 M.onExtensionLoaded = onExtensionLoaded
 M.onExtensionUnloaded = onExtensionUnloaded
+M.updateR3 = M.updateR3
 
-_G.hshifter = M  -- Had probblems with context so made it globally available
+_G.hshifter = M  
 
 return M
